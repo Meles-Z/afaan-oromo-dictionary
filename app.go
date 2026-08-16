@@ -2,26 +2,67 @@ package main
 
 import (
 	"context"
-	"fmt"
+	"log"
+
+	"afaan-oromo-dictionary/internal/db"
+	"afaan-oromo-dictionary/internal/dictionary"
 )
 
-// App struct
 type App struct {
-	ctx context.Context
+	ctx     context.Context
+	service *dictionary.Service
 }
 
-// NewApp creates a new App application struct
 func NewApp() *App {
 	return &App{}
 }
 
-// startup is called when the app starts. The context is saved
-// so we can call the runtime methods
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
+
+	conn, err := db.New("dictionary.db")
+	if err != nil {
+		log.Fatalf("failed to open database: %v", err)
+	}
+
+	if err := db.RunMigrations(conn); err != nil {
+		log.Fatalf("failed to run migrations: %v", err)
+	}
+
+	repo := dictionary.NewRepository(conn)
+	a.service = dictionary.NewService(repo)
 }
 
-// Greet returns a greeting for the given name
-func (a *App) Greet(name string) string {
-	return fmt.Sprintf("Hello %s, It's show time!", name)
+func (a *App) SearchWords(query string, direction string) []dictionary.Word {
+	words, err := a.service.Search(query, direction)
+	if err != nil {
+		log.Printf("search error: %v", err)
+		return []dictionary.Word{}
+	}
+	return words
+}
+
+func (a *App) GetWord(id int) (*dictionary.Word, error) {
+	return a.service.GetWord(id)
+}
+
+func (a *App) CreateWord(input dictionary.WordInput) (int, error) {
+	return a.service.CreateWord(input)
+}
+
+func (a *App) UpdateWord(id int, input dictionary.WordInput) error {
+	return a.service.UpdateWord(id, input)
+}
+
+func (a *App) DeleteWord(id int) error {
+	return a.service.DeleteWord(id)
+}
+
+func (a *App) ListCategories() []dictionary.Category {
+	cats, err := a.service.ListCategories()
+	if err != nil {
+		log.Printf("list categories error: %v", err)
+		return []dictionary.Category{}
+	}
+	return cats
 }
