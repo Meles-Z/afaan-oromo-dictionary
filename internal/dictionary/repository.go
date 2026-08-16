@@ -3,6 +3,7 @@ package dictionary
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 )
 
 type Repository struct {
@@ -13,47 +14,59 @@ func NewRepository(db *sql.DB) *Repository {
 	return &Repository{db: db}
 }
 
-// Search does a prefix match on english. Direction ("en" or "om") decides
-// which column to search against.
 func (r *Repository) Search(query, direction string) ([]Word, error) {
+	query = strings.TrimSpace(query)
+	if query == "" {
+		return []Word{}, nil
+	}
+
 	column := "english"
 	if direction == "om" {
 		column = "afaan_oromo"
 	}
 
+	ftsQuery := fmt.Sprintf(`"%s"*`, strings.ReplaceAll(query, `"`, `""`))
+
 	rows, err := r.db.Query(fmt.Sprintf(`
-		SELECT id, english, afaan_oromo, part_of_speech, example_en, example_om,
-		       pronunciation, created_at, updated_at
-		FROM words
-		WHERE %s LIKE ?
-		ORDER BY %s
-		LIMIT 50
-	`, column, column), query+"%")
+    SELECT w.id, w.english, w.afaan_oromo, w.part_of_speech, w.example_en, w.example_om,
+           w.pronunciation, w.created_at, w.updated_at
+    FROM words_fts f
+    JOIN words w ON w.id = f.rowid
+    WHERE f.%s MATCH ?
+    ORDER BY
+      CASE WHEN w.%s = ?2 COLLATE NOCASE THEN 0 ELSE 1 END,
+      f.rank
+    LIMIT 50
+`, column, column), ftsQuery, query)
 	if err != nil {
 		return nil, fmt.Errorf("search words: %w", err)
 	}
 	defer rows.Close()
 
-	var words []Word
-	for rows.Next() {
-		var w Word
-		if err := rows.Scan(&w.ID, &w.English, &w.AfaanOromo, &w.PartOfSpeech,
-			&w.ExampleEn, &w.ExampleOm, &w.Pronunciation, &w.CreatedAt, &w.UpdatedAt); err != nil {
-			return nil, fmt.Errorf("scan word: %w", err)
-		}
-		words = append(words, w)
+	words, err := scanWords(rows)
+	if err != nil {
+		return nil, err
 	}
-	return words, rows.Err()
+
+	// Fallback: no FTS matches (e.g. typo, or a substring mid-word) — try a
+	// plain contains search so the user isn't left with a false "not found"
+	if len(words) == 0 {
+		return r.searchContains(query, column)
+	}
+
+	return words, nil
 }
 
 func (r *Repository) GetByID(id int) (*Word, error) {
 	var w Word
+	var partOfSpeech, exampleEn, exampleOm, pronunciation sql.NullString
+
 	err := r.db.QueryRow(`
 		SELECT id, english, afaan_oromo, part_of_speech, example_en, example_om,
 		       pronunciation, created_at, updated_at
 		FROM words WHERE id = ?
-	`, id).Scan(&w.ID, &w.English, &w.AfaanOromo, &w.PartOfSpeech,
-		&w.ExampleEn, &w.ExampleOm, &w.Pronunciation, &w.CreatedAt, &w.UpdatedAt)
+	`, id).Scan(&w.ID, &w.English, &w.AfaanOromo, &partOfSpeech,
+		&exampleEn, &exampleOm, &pronunciation, &w.CreatedAt, &w.UpdatedAt)
 
 	if err == sql.ErrNoRows {
 		return nil, ErrNotFound
@@ -61,6 +74,12 @@ func (r *Repository) GetByID(id int) (*Word, error) {
 	if err != nil {
 		return nil, fmt.Errorf("get word by id: %w", err)
 	}
+
+	w.PartOfSpeech = partOfSpeech.String
+	w.ExampleEn = exampleEn.String
+	w.ExampleOm = exampleOm.String
+	w.Pronunciation = pronunciation.String
+
 	return &w, nil
 }
 
@@ -106,8 +125,6 @@ func (r *Repository) Delete(id int) error {
 	return nil
 }
 
-// setCategories replaces all category links for a word (delete + reinsert —
-// simplest correct approach for a small join table).
 func (r *Repository) setCategories(wordID int, categoryIDs []int) error {
 	if _, err := r.db.Exec(`DELETE FROM word_categories WHERE word_id = ?`, wordID); err != nil {
 		return fmt.Errorf("clear categories: %w", err)
@@ -139,4 +156,39 @@ func (r *Repository) ListCategories() ([]Category, error) {
 		cats = append(cats, c)
 	}
 	return cats, rows.Err()
+}
+
+func (r *Repository) searchContains(query, column string) ([]Word, error) {
+	rows, err := r.db.Query(fmt.Sprintf(`
+		SELECT id, english, afaan_oromo, part_of_speech, example_en, example_om,
+		       pronunciation, created_at, updated_at
+		FROM words
+		WHERE %s LIKE ?
+		ORDER BY %s
+		LIMIT 50
+	`, column, column), "%"+query+"%")
+	if err != nil {
+		return nil, fmt.Errorf("fallback search: %w", err)
+	}
+	defer rows.Close()
+	return scanWords(rows)
+}
+
+func scanWords(rows *sql.Rows) ([]Word, error) {
+	var words []Word
+	for rows.Next() {
+		var w Word
+		var partOfSpeech, exampleEn, exampleOm, pronunciation sql.NullString
+
+		if err := rows.Scan(&w.ID, &w.English, &w.AfaanOromo, &partOfSpeech,
+			&exampleEn, &exampleOm, &pronunciation, &w.CreatedAt, &w.UpdatedAt); err != nil {
+			return nil, fmt.Errorf("scan word: %w", err)
+		}
+		w.PartOfSpeech = partOfSpeech.String
+		w.ExampleEn = exampleEn.String
+		w.ExampleOm = exampleOm.String
+		w.Pronunciation = pronunciation.String
+		words = append(words, w)
+	}
+	return words, rows.Err()
 }
