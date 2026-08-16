@@ -8,8 +8,9 @@
   let results: dictionary.Word[] = [];
   let loading = false;
   let searched = false;
-  let direction: Direction = 'en'; // 'en' = search English, 'om' = search Afaan Oromo
+  let direction: Direction = 'en';
   let swapping = false;
+  let selectedWord: dictionary.Word | null = null;
 
   let debounceTimer: ReturnType<typeof setTimeout>;
   let requestId = 0;
@@ -19,9 +20,16 @@
     om: { name: 'Afaan Oromo', placeholder: 'Barreessi jecha Afaan Oromoo…' }
   };
 
+  // Capitalizes only the first letter of the whole string, leaves the rest untouched
+  function cap(text: string): string {
+    if (!text) return text;
+    return text.charAt(0).toUpperCase() + text.slice(1);
+  }
+
   function onInput() {
     clearTimeout(debounceTimer);
     const trimmed = query.trim();
+    selectedWord = null;
 
     if (trimmed === '') {
       results = [];
@@ -59,12 +67,21 @@
     results = [];
     searched = false;
     loading = false;
+    selectedWord = null;
     setTimeout(() => (swapping = false), 400);
   }
 
   function selectDirection(d: Direction) {
     if (d === direction) return;
     swapDirection();
+  }
+
+  function openDetail(word: dictionary.Word) {
+    selectedWord = word;
+  }
+
+  function backToResults() {
+    selectedWord = null;
   }
 </script>
 
@@ -77,34 +94,17 @@
   <div class="translator">
     <!-- Language selector row -->
     <div class="lang-row">
-      <button
-        class="lang-pill"
-        class:active={direction === 'en'}
-        on:click={() => selectDirection('en')}
-      >
+      <button class="lang-pill" class:active={direction === 'en'} on:click={() => selectDirection('en')}>
         English
       </button>
 
-      <button
-        class="swap-btn"
-        class:spinning={swapping}
-        on:click={swapDirection}
-        aria-label="Swap languages"
-        title="Swap languages"
-      >
+      <button class="swap-btn" class:spinning={swapping} on:click={swapDirection} aria-label="Swap languages" title="Swap languages">
         <svg viewBox="0 0 24 24" width="20" height="20">
-          <path
-            fill="currentColor"
-            d="M7 7h11l-3.5-3.5L16 2l6 6-6 6-1.5-1.5L18 9H7V7zm10 10H6l3.5 3.5L8 22l-6-6 6-6 1.5 1.5L6 15h11v2z"
-          />
+          <path fill="currentColor" d="M7 7h11l-3.5-3.5L16 2l6 6-6 6-1.5-1.5L18 9H7V7zm10 10H6l3.5 3.5L8 22l-6-6 6-6 1.5 1.5L6 15h11v2z"/>
         </svg>
       </button>
 
-      <button
-        class="lang-pill"
-        class:active={direction === 'om'}
-        on:click={() => selectDirection('om')}
-      >
+      <button class="lang-pill" class:active={direction === 'om'} on:click={() => selectDirection('om')}>
         Afaan Oromo
       </button>
     </div>
@@ -123,54 +123,84 @@
       {/if}
     </div>
 
-    <!-- Results -->
-    <div class="results">
-      {#if searched && !loading && results.length === 0}
-        <div class="empty-state">
-          <span class="empty-icon">◌</span>
-          <p class="empty-title">Hin argamne</p>
-          <p class="empty-sub">No entry for “{query.trim()}” yet.</p>
+    {#if selectedWord}
+      <!-- LARGE DETAIL VIEW: replaces the list entirely while active -->
+      <div class="detail-large">
+        <button class="back-btn" on:click={backToResults}>
+          ← Back to results
+        </button>
+
+        <div class="detail-term-large">
+          {cap(direction === 'en' ? selectedWord.english : selectedWord.afaanOromo)}
+          {#if selectedWord.partOfSpeech}
+            <span class="detail-pos-large">{selectedWord.partOfSpeech}</span>
+          {/if}
         </div>
-      {:else if results.length > 0}
-        <ul>
-          {#each results as word (word.id)}
-            <li>
-              <div class="word-row">
-                <span class="term">
-                  {direction === 'en' ? word.english : word.afaanOromo}
-                </span>
-                {#if word.partOfSpeech}
-                  <span class="pos">{word.partOfSpeech}</span>
-                {/if}
-              </div>
-              <div class="translation">
-                {direction === 'en' ? word.afaanOromo : word.english}
-              </div>
-              {#if direction === 'en' && word.exampleEn}
-                <div class="example">
-                  <span class="ex-en">{word.exampleEn}</span>
-                  {#if word.exampleOm}
-                    <span class="ex-om">{word.exampleOm}</span>
-                  {/if}
-                </div>
-              {:else if direction === 'om' && word.exampleOm}
-                <div class="example">
-                  <span class="ex-en">{word.exampleOm}</span>
-                  {#if word.exampleEn}
-                    <span class="ex-om">{word.exampleEn}</span>
-                  {/if}
-                </div>
-              {/if}
-            </li>
-          {/each}
-        </ul>
-      {:else if !searched}
-        <div class="idle-state">
-          <p>Search a word in {labels[direction].name} to begin.</p>
+
+        <div class="detail-translation-large">
+          {cap(direction === 'en' ? selectedWord.afaanOromo : selectedWord.english)}
         </div>
-      {/if}
-    </div>
+
+        {#if selectedWord.pronunciation}
+          <div class="detail-pron-large">/{selectedWord.pronunciation}/</div>
+        {/if}
+
+        {#if selectedWord.exampleEn || selectedWord.exampleOm}
+          <div class="detail-examples-large">
+            {#if selectedWord.exampleEn}
+              <p class="ex-en">{selectedWord.exampleEn}</p>
+            {/if}
+            {#if selectedWord.exampleOm}
+              <p class="ex-om">{selectedWord.exampleOm}</p>
+            {/if}
+          </div>
+        {/if}
+      </div>
+    {:else}
+      <!-- RESULTS LIST: hidden while a detail is open -->
+      <div class="results">
+        {#if searched && !loading && results.length === 0}
+          <div class="empty-state">
+            <span class="empty-icon">◌</span>
+            <p class="empty-title">Hin argamne</p>
+            <p class="empty-sub">No entry for "{query.trim()}" yet.</p>
+          </div>
+        {:else if results.length > 0}
+          <ul>
+            {#each results as word (word.id)}
+              <li>
+                <button class="result-btn" on:click={() => openDetail(word)}>
+                  <div class="word-row">
+                    <span class="term">
+                      {cap(direction === 'en' ? word.english : word.afaanOromo)}
+                    </span>
+                    {#if word.partOfSpeech}
+                      <span class="pos">{word.partOfSpeech}</span>
+                    {/if}
+                  </div>
+                  <div class="translation">
+                    {cap(direction === 'en' ? word.afaanOromo : word.english)}
+                  </div>
+                </button>
+              </li>
+            {/each}
+          </ul>
+        {:else if !searched}
+          <div class="idle-state">
+            <p>Search a word in {labels[direction].name} to begin.</p>
+          </div>
+        {/if}
+      </div>
+    {/if}
   </div>
+
+  <footer>
+    <p>Developed by <strong>Meles Zewude</strong></p>
+    <p class="footer-contact">
+      <!-- Replace with your real email / phone -->
+      meles.zewde.tech@gmail.com &nbsp;•&nbsp; +251-92-022-7833
+    </p>
+  </footer>
 </main>
 
 <style>
@@ -181,9 +211,13 @@
   main {
     max-width: 640px;
     margin: 0 auto;
-    padding: 3rem 1.5rem 4rem;
+    padding: 3rem 1.5rem 2rem;
     font-family: 'Nunito', system-ui, sans-serif;
     color: #edeff2;
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+    box-sizing: border-box;
   }
 
   header {
@@ -214,6 +248,7 @@
     border-radius: 16px;
     padding: 1.25rem;
     backdrop-filter: blur(6px);
+    flex: 1;
   }
 
   .lang-row {
@@ -273,7 +308,7 @@
 
   .search-box {
     position: relative;
-    margin-bottom: 1.25rem;
+    margin-bottom: 1rem;
   }
 
   input {
@@ -314,6 +349,83 @@
     to { transform: rotate(360deg); }
   }
 
+  /* LARGE detail view */
+  .detail-large {
+    text-align: left;
+    padding: 1rem 0.5rem 0.5rem;
+    animation: fadeIn 0.2s ease;
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-6px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .back-btn {
+    background: none;
+    border: none;
+    color: #e0a458;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    padding: 0 0 1.25rem;
+  }
+
+  .back-btn:hover {
+    text-decoration: underline;
+  }
+
+  .detail-term-large {
+    font-size: 2.1rem;
+    font-weight: 800;
+    color: #edeff2;
+    display: flex;
+    align-items: baseline;
+    gap: 0.7rem;
+    flex-wrap: wrap;
+  }
+
+  .detail-pos-large {
+    font-size: 0.9rem;
+    font-style: italic;
+    font-weight: 400;
+    color: #7c93a8;
+  }
+
+  .detail-translation-large {
+    font-size: 1.6rem;
+    font-weight: 700;
+    color: #4fb8a6;
+    margin-top: 0.5rem;
+  }
+
+  .detail-pron-large {
+    font-size: 1rem;
+    color: #7c93a8;
+    margin-top: 0.4rem;
+  }
+
+  .detail-examples-large {
+    margin-top: 1.25rem;
+    padding-top: 1.25rem;
+    border-top: 1px solid #2c3c4f;
+  }
+
+  .detail-examples-large p {
+    margin: 0 0 0.4rem;
+    font-size: 1rem;
+  }
+
+  .ex-en {
+    color: #edeff2;
+  }
+
+  .ex-om {
+    color: #8fa1b8;
+    font-style: italic;
+  }
+
+  /* Results list */
   .results ul {
     list-style: none;
     margin: 0;
@@ -321,13 +433,26 @@
   }
 
   .results li {
-    text-align: left;
-    padding: 0.9rem 0;
     border-bottom: 1px solid #2c3c4f;
   }
 
   .results li:last-child {
     border-bottom: none;
+  }
+
+  .result-btn {
+    width: 100%;
+    text-align: left;
+    background: none;
+    border: none;
+    padding: 0.9rem 0.5rem;
+    cursor: pointer;
+    border-radius: 8px;
+    transition: background 0.15s;
+  }
+
+  .result-btn:hover {
+    background: #ffffff08;
   }
 
   .word-row {
@@ -353,20 +478,6 @@
     color: #4fb8a6;
     font-weight: 600;
     margin-top: 0.2rem;
-  }
-
-  .example {
-    margin-top: 0.4rem;
-    font-size: 0.85rem;
-    color: #8fa1b8;
-    display: flex;
-    flex-direction: column;
-    gap: 0.15rem;
-  }
-
-  .ex-om {
-    color: #6c8098;
-    font-style: italic;
   }
 
   .idle-state,
@@ -395,12 +506,34 @@
     font-size: 0.9rem;
   }
 
+  footer {
+    text-align: center;
+    margin-top: 2rem;
+    padding-top: 1.25rem;
+    color: #5f7488;
+    font-size: 0.8rem;
+  }
+
+  footer p {
+    margin: 0.2rem 0;
+  }
+
+  .footer-contact {
+    color: #4c5f74;
+  }
+
   @media (max-width: 480px) {
     .lang-row {
       flex-wrap: wrap;
     }
     .lang-pill {
       flex: 1 1 40%;
+    }
+    .detail-term-large {
+      font-size: 1.6rem;
+    }
+    .detail-translation-large {
+      font-size: 1.3rem;
     }
   }
 </style>
