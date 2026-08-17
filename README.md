@@ -101,3 +101,20 @@ If you have Afaan Oromo dictionary data you're willing to share, or want to cont
 ## License
 
 MIT — see [LICENSE](./LICENSE) for details.
+
+
+
+## Demo
+
+<table>
+  <tr>
+    <td align="center"><b>English Version</b></td>
+    <td align="center"><b>Oromo Version</b></td>
+    <td align="center"><b>Detailed View</b></td>
+  </tr>
+  <tr>
+    <td><img src="assets/english.png" alt="English Interface" width="300"></td>
+    <td><img src="assets/oromo.png" alt="Oromo Interface" width="300"></td>
+    <td><img src="assets/detail.png" alt="Detailed Feature View" width="300"></td>
+  </tr>
+</table>
