@@ -81,7 +81,7 @@ Produces a redistributable native binary in `build/bin/`.
 
 ## Data
 
-Dictionary entries were extracted and parsed from an existing Afaan Oromo–English word document, cleaned, deduplicated, and imported into the local SQLite database via a Python parsing script. The dataset currently contains ~3,100 word pairs, covering common vocabulary across everyday topics.
+Dictionary entries were extracted and parsed from an existing Afaan Oromo–English word document, cleaned, deduplicated, and imported into the local SQLite database via a Python parsing script. The dataset currently contains ~ 3431 word pairs, covering common vocabulary across everyday topics.
 
 **Have a more complete word list?** Please reach out — see below.
 
