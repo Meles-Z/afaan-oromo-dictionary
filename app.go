@@ -29,10 +29,13 @@ func (a *App) startup(ctx context.Context) {
 		log.Fatalf("failed to run migrations: %v", err)
 	}
 
+	if err := db.SeedIfEmpty(conn); err != nil {
+		log.Fatalf("failed to seed database: %v", err)
+	}
+
 	repo := dictionary.NewRepository(conn)
 	a.service = dictionary.NewService(repo)
 }
-
 func (a *App) SearchWords(query string, direction string) []dictionary.Word {
 	words, err := a.service.Search(query, direction)
 	if err != nil {
