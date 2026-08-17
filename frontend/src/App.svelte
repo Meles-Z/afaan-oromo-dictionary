@@ -1,6 +1,14 @@
 <script lang="ts">
   import { SearchWords } from '../wailsjs/go/main/App';
   import type { dictionary } from '../wailsjs/go/models';
+  import { onMount } from 'svelte';
+
+
+  let inputEl: HTMLInputElement;
+
+  onMount(() => {
+    inputEl?.focus();
+  });
 
   type Direction = 'en' | 'om';
 
@@ -112,6 +120,7 @@
     <!-- Search input -->
     <div class="search-box">
       <input
+        bind:this={inputEl}
         type="text"
         bind:value={query}
         on:input={onInput}
@@ -230,10 +239,7 @@
     font-weight: 800;
     letter-spacing: -0.02em;
     margin: 0;
-    background: linear-gradient(135deg, #e0a458, #f2c879);
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
+    color: #e0a458;
   }
 
   .subtitle {
